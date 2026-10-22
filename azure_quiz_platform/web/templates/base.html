@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>{% block title %}Personal Revision Bank{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <script>
+        (function() {
+            try {
+                var savedTheme = localStorage.getItem('theme');
+                if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                var savedLang = localStorage.getItem('rev_lang') || 'en';
+                if (savedLang === 'ar') {
+                    document.documentElement.lang = 'ar';
+                    document.documentElement.dir = 'rtl';
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Tahoma", "Cairo", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-text-size-adjust: 100%;
+            scroll-behavior: smooth;
+        }
+        body {
+            background-color: #f8fafc;
+            color: #0f172a;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        html.dark body {
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+        .wrap-anywhere {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .app-container {
+            width: 100%;
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 0.75rem;
+        }
+        @media (min-width: 640px) {
+            .app-container {
+                padding: 1.25rem;
+            }
+        }
+        .touch-btn {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            padding: 0.5rem 0.875rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-decoration: none;
+            cursor: pointer;
+            transition: transform 0.1s ease, background-color 0.15s ease, border-color 0.15s ease;
+            max-width: 100%;
+            user-select: none;
+        }
+        .touch-btn:active {
+            transform: scale(0.98);
+        }
+        input, select, textarea, button {
+            max-width: 100%;
+            font-size: 16px; /* Prevents iOS auto-zoom on input focus */
+        }
+        .safe-bottom {
+            padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+        }
+        /* Hide scrollbar for horizontal pill strips on mobile */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Study mode: hide answers until revealed */
+        body.study-hide-answers .q-correct-badge,
+        body.study-hide-answers .q-answer-box {
+            display: none !important;
+        }
+        body.study-hide-answers .q-option-correct:not(.q-revealed) {
+            border-color: rgba(148, 163, 184, 0.35) !important;
+            background-color: rgba(248, 250, 252, 0.5) !important;
+            color: inherit !important;
+            font-weight: 400 !important;
+        }
+        html.dark body.study-hide-answers .q-option-correct:not(.q-revealed) {
+            border-color: rgba(51, 65, 85, 0.8) !important;
+            background-color: rgba(15, 23, 42, 0.4) !important;
+        }
+        body.study-hide-answers .q-option-correct:not(.q-revealed) .q-opt-letter {
+            background-color: #e2e8f0 !important;
+            color: #334155 !important;
+        }
+        html.dark body.study-hide-answers .q-option-correct:not(.q-revealed) .q-opt-letter {
+            background-color: #334155 !important;
+            color: #cbd5e1 !important;
+        }
+        body.study-hide-answers article.card-revealed .q-correct-badge {
+            display: inline !important;
+        }
+        body.study-hide-answers article.card-revealed .q-answer-box {
+            display: block !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Top Compact App Bar -->
+    <header class="sticky top-0 z-40 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-700/80 w-full shadow-xs">
+        <div class="max-w-6xl mx-auto px-3 sm:px-5">
+            <div class="flex items-center justify-between h-14 gap-2">
+                <!-- Brand -->
+                <a href="/" class="flex items-center gap-2 font-bold text-base sm:text-lg text-blue-600 dark:text-blue-400 truncate">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-lg shrink-0" aria-hidden="true">📚</span>
+                    <span class="truncate" data-i18n="app_title">Revision Bank</span>
+                </a>
+
+                {% if user %}
+                <!-- Desktop Navigation Links -->
+                <nav class="hidden sm:flex items-center gap-1" aria-label="Main Navigation">
+                    {% set path = request.url.path %}
+                    <a href="/"
+                       data-i18n="nav_dashboard"
+                       class="px-3.5 py-2 rounded-xl text-sm font-semibold transition {% if path == '/' %}bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60{% endif %}">
+                        Dashboard
+                    </a>
+                    <a href="/questions"
+                       data-i18n="nav_questions"
+                       class="px-3.5 py-2 rounded-xl text-sm font-semibold transition {% if path.startswith('/questions') or path.startswith('/revision') %}bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60{% endif %}">
+                        My Questions
+                    </a>
+                    <a href="/settings"
+                       data-i18n="nav_settings"
+                       class="px-3.5 py-2 rounded-xl text-sm font-semibold transition {% if path.startswith('/settings') or path.startswith('/account') or path.startswith('/profile') %}bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60{% endif %}">
+                        Settings
+                    </a>
+                </nav>
+                {% endif %}
+
+                <!-- Right Actions: Language Toggle (EN/عربي) + Theme + User + Logout -->
+                <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    <button type="button" onclick="toggleSiteLanguage()"
+                            id="lang-toggle-btn"
+                            class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold hover:bg-blue-100 transition"
+                            title="Translate interface to Arabic / English" aria-label="Toggle language">
+                        <span>🌐</span>
+                        <span id="lang-toggle-label">عربي</span>
+                    </button>
+
+                    <button type="button" onclick="toggleTheme()"
+                            class="p-2 rounded-xl bg-slate-100 dark:bg-slate-700/70 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm transition"
+                            title="Toggle dark/light theme" aria-label="Toggle theme">
+                        🌓
+                    </button>
+
+                    {% if user %}
+                    <a href="/settings" class="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-700/70 text-xs font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[140px]">
+                        <span>👤</span>
+                        <span class="truncate">{{ user.first_name }}</span>
+                    </a>
+                    <a href="/logout"
+                       data-i18n="nav_logout"
+                       class="px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 bg-red-50/70 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition">
+                        Log out
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Page Content (with extra bottom padding on phones for bottom nav bar) -->
+    <main class="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-5 pt-3.5 pb-24 sm:py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Compact Desktop Footer -->
+    <footer class="hidden sm:block w-full border-t border-slate-200 dark:border-slate-800 py-4 mt-auto text-center text-xs text-slate-500 dark:text-slate-400 px-3" data-i18n="footer_text">
+        Personal Revision Bank • Connected to @MistakesCore_bot &amp; Azure SQL
+    </footer>
+
+    {% if user %}
+    <!-- Native Phone Bottom App Bar (Fixed on screens < 640px) -->
+    <nav class="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-700/90 safe-bottom shadow-lg" aria-label="Mobile Bottom Navigation">
+        {% set path = request.url.path %}
+        <div class="grid grid-cols-3 gap-1 px-2 pt-1.5 max-w-md mx-auto">
+            <a href="/"
+               class="flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-[11px] font-bold transition {% if path == '/' %}text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-900/30{% else %}text-slate-500 dark:text-slate-400{% endif %}">
+                <span class="text-base leading-none mb-0.5">🏠</span>
+                <span data-i18n="nav_dashboard">Dashboard</span>
+            </a>
+            <a href="/questions"
+               class="flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-[11px] font-bold transition {% if path.startswith('/questions') or path.startswith('/revision') %}text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-900/30{% else %}text-slate-500 dark:text-slate-400{% endif %}">
+                <span class="text-base leading-none mb-0.5">📂</span>
+                <span data-i18n="nav_questions">My Questions</span>
+            </a>
+            <a href="/settings"
+               class="flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-[11px] font-bold transition {% if path.startswith('/settings') or path.startswith('/account') or path.startswith('/profile') %}text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-900/30{% else %}text-slate-500 dark:text-slate-400{% endif %}">
+                <span class="text-base leading-none mb-0.5">⚙️</span>
+                <span data-i18n="nav_settings">Settings</span>
+            </a>
+        </div>
+    </nav>
+    {% endif %}
+
+    <script>
+        /* =====================================================================
+           1. THEME ENGINE (Instant Dark / Light Mode)
+           ===================================================================== */
+        function toggleTheme() {
+            var root = document.documentElement;
+            var isDark = root.classList.toggle('dark');
+            try {
+                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            } catch (e) {}
+        }
+
+        /* =====================================================================
+           2. ZERO-OVERHEAD BILINGUAL UI ENGINE (English <-> Arabic RTL)
+           ===================================================================== */
+        var UI_DICT_AR = {
+            app_title: "بنك المراجعة الشخصي",
+            nav_dashboard: "الرئيسية",
+            nav_questions: "أسئلتي",
+            nav_settings: "الإعدادات",
+            nav_logout: "خروج",
+            footer_text: "بنك المراجعة الشخصي • متصل ببوت تيليجرام وقاعدة بيانات Azure SQL",
+            /* Login */
+            login_title: "بنك المراجعة الشخصي",
+            login_subtitle: "سجّل الدخول بمعرّف تيليجرام وكلمة المرور لمراجعة أسئلتك المحفوظة.",
+            login_tid_label: "معرّف تيليجرام (Telegram ID)",
+            login_pw_label: "كلمة المرور أو رمز الدخول المؤقت",
+            login_btn: "تسجيل الدخول",
+            login_howto_title: "كيف تحصل على بيانات الدخول:",
+            login_step1: "افتح بوت تيليجرام:",
+            login_step2: "أرسل /start أو /login للحصول على معرّف تيليجرام ورمز الدخول.",
+            login_step3: "استخدم /resetpassword أو /setpassword لتعيين كلمة مرور دائمة.",
+            /* Dashboard */
+            dash_browse_btn: "📂 تصفح أسئلتي",
+            dash_total_qs: "إجمالي الأسئلة المحفوظة",
+            dash_view_all: "عرض الكل ←",
+            dash_mistakes: "❌ الأخطاء (Mistakes)",
+            dash_review_mistakes: "مراجعة الأخطاء ←",
+            dash_difficult: "⭐ صعبة (Difficult)",
+            dash_review_difficult: "مراجعة الصعبة ←",
+            dash_subjects_used: "📘 المواد المستخدمة",
+            dash_active_subjects: "مواد نشطة",
+            dash_personal_subtopics: "📂 المواضيع الفرعية",
+            dash_custom_folders: "مجلداتك الخاصة",
+            dash_subjects_heading: "المواد والمواضيع الفرعية",
+            dash_manage_subtopics: "إدارة المواضيع ←",
+            dash_no_subtopics: "لا توجد مواضيع فرعية بعد.",
+            dash_recent_heading: "أحدث الأسئلة المحفوظة",
+            /* My Questions */
+            rev_title: "أسئلة المراجعة الخاصة بي",
+            rev_subtitle: "منظمة حسب المادة ← الموضوع الفرعي ← السؤال ← التصنيف",
+            rev_translate_all: "🌐 ترجمة الكل للعربية",
+            rev_study_mode: "👁 إخفاء الإجابات للتدريب",
+            rev_export_filtered: "⬇️ تصدير TXT",
+            rev_filter_subject: "المادة الدراسية",
+            rev_all_subjects: "كل المواد",
+            rev_filter_subtopic: "الموضوع الفرعي",
+            rev_all_subtopics: "كل المواضيع الفرعية",
+            rev_filter_search: "بحث نصي",
+            rev_search_placeholder: "ابحث في الأسئلة أو الخيارات...",
+            rev_filter_btn: "🔍 تصفية",
+            rev_reset_btn: "إعادة ضبط",
+            rev_mobile_folders_btn: "📚 المواد والمجلدات",
+            rev_mobile_new_subt_btn: "➕ موضوع فرعي جديد",
+            rev_create_subt_title: "➕ إنشاء موضوع فرعي جديد",
+            rev_subt_name_label: "اسم الموضوع الفرعي",
+            rev_subt_name_placeholder: "أدخل اسم الموضوع الفرعي...",
+            rev_create_subt_btn: "إنشاء الموضوع الفرعي",
+            rev_selected_subtopic: "الموضوع الفرعي المحدد",
+            rev_rename_btn: "تعديل الاسم",
+            rev_move_btn: "نقل",
+            rev_delete_subt_btn: "🗑 حذف مجلد الموضوع الفرعي",
+            rev_hierarchy_title: "📚 شجرة المواد والمواضيع",
+            rev_show_all: "عرض الكل",
+            rev_no_questions_title: "لا توجد أسئلة محفوظة",
+            rev_select_all_export: "تحديد الكل للتصدير",
+            rev_btn_translate: "🌐 ترجمة للعربية",
+            rev_btn_original: "🌐 النص الأصلي (EN)",
+            rev_btn_reveal: "👁 إظهار الإجابة",
+            rev_btn_move: "📂 نقل",
+            rev_btn_edit: "✏️ تعديل",
+            rev_btn_delete: "🗑 حذف",
+            rev_correct_badge: "✓ صحيحة",
+            /* Settings */
+            set_title: "الإعدادات والحساب",
+            set_subtitle: "إدارة معلومات حسابك الشخصي وكلمة المرور والجلسة.",
+            set_acc_info: "👤 معلومات الحساب",
+            set_tid_label: "معرّف تيليجرام (رقم الدخول)",
+            set_name_label: "الاسم",
+            set_username_label: "اسم المستخدم في تيليجرام",
+            set_summary_label: "ملخص بنك المراجعة",
+            set_change_pw: "🔒 تغيير / تعيين كلمة المرور",
+            set_pw_note: "يتم تشفير كلمات المرور بأمان باستخدام PBKDF2-HMAC-SHA256.",
+            set_curr_pw: "كلمة المرور الحالية",
+            set_new_pw: "كلمة المرور الجديدة",
+            set_conf_pw: "تأكيد كلمة المرور الجديدة",
+            set_save_pw_btn: "حفظ كلمة المرور"
+        };
+
+        function applySiteLanguage(lang) {
+            var root = document.documentElement;
+            var isAr = (lang === 'ar');
+            root.lang = isAr ? 'ar' : 'en';
+            root.dir = isAr ? 'rtl' : 'ltr';
+
+            var labelEl = document.getElementById('lang-toggle-label');
+            if (labelEl) {
+                labelEl.textContent = isAr ? 'EN' : 'عربي';
+            }
+
+            var nodes = document.querySelectorAll('[data-i18n]');
+            for (var i = 0; i < nodes.length; i++) {
+                var el = nodes[i];
+                var key = el.getAttribute('data-i18n');
+                if (!el.hasAttribute('data-orig-en')) {
+                    el.setAttribute('data-orig-en', el.textContent.trim());
+                }
+                if (isAr && UI_DICT_AR[key]) {
+                    el.textContent = UI_DICT_AR[key];
+                } else if (!isAr && el.hasAttribute('data-orig-en')) {
+                    el.textContent = el.getAttribute('data-orig-en');
+                }
+            }
+
+            var inputs = document.querySelectorAll('[data-i18n-placeholder]');
+            for (var j = 0; j < inputs.length; j++) {
+                var inp = inputs[j];
+                var pKey = inp.getAttribute('data-i18n-placeholder');
+                if (!inp.hasAttribute('data-orig-placeholder')) {
+                    inp.setAttribute('data-orig-placeholder', inp.getAttribute('placeholder') || '');
+                }
+                if (isAr && UI_DICT_AR[pKey]) {
+                    inp.setAttribute('placeholder', UI_DICT_AR[pKey]);
+                } else if (!isAr && inp.hasAttribute('data-orig-placeholder')) {
+                    inp.setAttribute('placeholder', inp.getAttribute('data-orig-placeholder'));
+                }
+            }
+        }
+
+        function toggleSiteLanguage() {
+            var current = 'en';
+            try {
+                current = localStorage.getItem('rev_lang') || 'en';
+            } catch (e) {}
+            var next = (current === 'ar') ? 'en' : 'ar';
+            try {
+                localStorage.setItem('rev_lang', next);
+            } catch (e) {}
+            applySiteLanguage(next);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                var savedLang = localStorage.getItem('rev_lang') || 'en';
+                if (savedLang === 'ar') {
+                    applySiteLanguage('ar');
+                }
+            } catch (e) {}
+        });
+
+        /* =====================================================================
+           3. ON-DEMAND QUESTION TRANSLATION ENGINE (Client-first + Local Cache)
+           Does NOT block page load, bot polling, or Azure SQL queries.
+           ===================================================================== */
+        var _AR_MEM_CACHE = {};
+
+        function _getCachedTranslation(text) {
+            if (!text) return null;
+            if (_AR_MEM_CACHE[text]) return _AR_MEM_CACHE[text];
+            try {
+                var raw = sessionStorage.getItem('ar_tr_' + btoa(unescape(encodeURIComponent(text.slice(0, 120)))));
+                if (raw) {
+                    _AR_MEM_CACHE[text] = raw;
+                    return raw;
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        function _setCachedTranslation(text, translated) {
+            if (!text || !translated) return;
+            _AR_MEM_CACHE[text] = translated;
+            try {
+                sessionStorage.setItem('ar_tr_' + btoa(unescape(encodeURIComponent(text.slice(0, 120)))), translated);
+            } catch (e) {}
+        }
+
+        async function translateSingleTextClient(text) {
+            var cleaned = (text || '').trim();
+            if (!cleaned) return '';
+            var cached = _getCachedTranslation(cleaned);
+            if (cached) return cached;
+
+            try {
+                var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=' + encodeURIComponent(cleaned);
+                var resp = await fetch(url);
+                if (resp.ok) {
+                    var data = await resp.json();
+                    var parts = (data && data[0]) ? data[0].map(function(s) { return s[0] || ''; }) : [];
+                    var result = parts.join('').trim();
+                    if (result) {
+                        _setCachedTranslation(cleaned, result);
+                        return result;
+                    }
+                }
+            } catch (e) {
+                /* Fallback to server proxy below */
+            }
+
+            try {
+                var fResp = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({texts: [cleaned]})
+                });
+                if (fResp.ok) {
+                    var fData = await fResp.json();
+                    if (fData.translations && fData.translations[0]) {
+                        _setCachedTranslation(cleaned, fData.translations[0]);
+                        return fData.translations[0];
+                    }
+                }
+            } catch (e2) {}
+
+            return cleaned;
+        }
+
+        async function toggleTranslateQuestionCard(questionId, btnEl) {
+            var card = document.getElementById('question-card-' + questionId);
+            if (!card) return;
+
+            var items = card.querySelectorAll('.translatable-item');
+            if (!items.length) return;
+
+            var isTranslated = card.getAttribute('data-translated-ar') === '1';
+            if (isTranslated) {
+                /* Restore original English text immediately */
+                for (var i = 0; i < items.length; i++) {
+                    var el = items[i];
+                    var orig = el.getAttribute('data-orig-text');
+                    if (orig !== null) {
+                        el.textContent = orig;
+                        el.removeAttribute('dir');
+                    }
+                }
+                card.setAttribute('data-translated-ar', '0');
+                if (btnEl) {
+                    btnEl.innerHTML = '🌐 <span>عربي</span>';
+                }
+                return;
+            }
+
+            /* Translate all items in parallel (non-blocking) */
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.innerHTML = '⏳ <span>...</span>';
+            }
+
+            var tasks = [];
+            for (var j = 0; j < items.length; j++) {
+                (function(el) {
+                    var orig = el.getAttribute('data-orig-text');
+                    if (orig === null) {
+                        orig = el.textContent.trim();
+                        el.setAttribute('data-orig-text', orig);
+                    }
+                    tasks.push(
+                        translateSingleTextClient(orig).then(function(arText) {
+                            el.textContent = arText;
+                            el.setAttribute('dir', 'rtl');
+                        })
+                    );
+                })(items[j]);
+            }
+
+            await Promise.all(tasks);
+            card.setAttribute('data-translated-ar', '1');
+            if (btnEl) {
+                btnEl.disabled = false;
+                btnEl.innerHTML = '🌐 <span>EN</span>';
+            }
+        }
+
+        var _allTranslatedState = false;
+        async function toggleTranslateAllQuestions(masterBtn) {
+            var buttons = document.querySelectorAll('.q-translate-btn');
+            if (!buttons.length) return;
+            _allTranslatedState = !_allTranslatedState;
+            if (masterBtn) {
+                masterBtn.disabled = true;
+            }
+            var promises = [];
+            for (var i = 0; i < buttons.length; i++) {
+                var btn = buttons[i];
+                var qid = btn.getAttribute('data-qid');
+                var card = document.getElementById('question-card-' + qid);
+                if (!card) continue;
+                var currentlyAr = card.getAttribute('data-translated-ar') === '1';
+                if (_allTranslatedState && !currentlyAr) {
+                    promises.push(toggleTranslateQuestionCard(qid, btn));
+                } else if (!_allTranslatedState && currentlyAr) {
+                    promises.push(toggleTranslateQuestionCard(qid, btn));
+                }
+            }
+            await Promise.all(promises);
+            if (masterBtn) {
+                masterBtn.disabled = false;
+                masterBtn.innerHTML = _allTranslatedState ? '🌐 Original (EN)' : '🌐 ترجمة الكل للعربية';
+            }
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

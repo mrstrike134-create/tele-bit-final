@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets - never commit
+.env
+.env.*
+
+# Database backups (contain real user data + password hashes)
+backups/
+*.bak
+
+# macOS / editor junk
+__MACOSX/
+.DS_Store
+.vscode/
+.idea/

@@ -1,0 +1,654 @@
+{% extends "base.html" %}
+{% block title %}My Questions — Personal Revision Bank{% endblock %}
+
+{% block content %}
+<div class="space-y-3.5 sm:space-y-4">
+
+    <!-- Page Header & Quick Mobile Action Pills (Translate All, Study Mode, Export) -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+        <div>
+            <h1 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white" data-i18n="rev_title">
+                My Revision Questions
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400" data-i18n="rev_subtitle">
+                Organized by Subject → Subtopic → Question → Category
+            </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            {% if questions %}
+            <!-- 1-Tap Translate All Visible Questions to Arabic -->
+            <button type="button"
+                    onclick="toggleTranslateAllQuestions(this)"
+                    data-i18n="rev_translate_all"
+                    class="touch-btn bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs px-3 py-2 rounded-xl font-bold">
+                🌐 ترجمة الكل للعربية
+            </button>
+
+            <!-- 1-Tap Self-Test / Hide Answers Toggle -->
+            <button type="button"
+                    onclick="toggleStudyMode(this)"
+                    id="study-mode-btn"
+                    data-i18n="rev_study_mode"
+                    class="touch-btn bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs px-3 py-2 rounded-xl">
+                👁 Hide Answers
+            </button>
+            {% endif %}
+
+            <a href="/questions/export.txt?{% if selected_subject_id %}subject_id={{ selected_subject_id }}&{% endif %}{% if selected_subtopic_id %}subtopic_id={{ selected_subtopic_id }}&{% endif %}{% if selected_category and selected_category != 'all' %}category={{ selected_category }}&{% endif %}{% if search_query %}q={{ search_query|urlencode }}{% endif %}"
+               class="touch-btn bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 text-xs px-3 py-2 rounded-xl">
+                ⬇️ Export TXT ({{ questions|length }})
+            </a>
+            <button type="button"
+                    onclick="exportSelectedQuestions()"
+                    id="export-selected-btn"
+                    class="hidden touch-btn bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-xl">
+                ⬇️ Export Selected TXT
+            </button>
+        </div>
+    </div>
+
+    <!-- Flash Alerts -->
+    {% if msg %}
+    <div class="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm wrap-anywhere">
+        ✅ {{ msg }}
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="p-3 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs sm:text-sm wrap-anywhere">
+        ⚠️ {{ error }}
+    </div>
+    {% endif %}
+
+    <!-- Category Tabs (All / Mistakes / Difficult) - Phone-optimized 3-col strip -->
+    <div class="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2">
+        {% set base_filter = namespace(qs='') %}
+        {% if selected_subject_id %}{% set base_filter.qs = base_filter.qs ~ '&subject_id=' ~ selected_subject_id %}{% endif %}
+        {% if selected_subtopic_id %}{% set base_filter.qs = base_filter.qs ~ '&subtopic_id=' ~ selected_subtopic_id %}{% endif %}
+        {% if search_query %}{% set base_filter.qs = base_filter.qs ~ '&q=' ~ (search_query|urlencode) %}{% endif %}
+
+        <a href="/questions?category=all{{ base_filter.qs }}"
+           class="touch-btn text-xs sm:text-sm px-2.5 sm:px-3.5 py-2 rounded-xl border transition text-center {% if selected_category == 'all' %}bg-blue-600 text-white border-blue-600 shadow-xs{% else %}bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700{% endif %}">
+            All ({{ summary.total }})
+        </a>
+        <a href="/questions?category=mistake{{ base_filter.qs }}"
+           class="touch-btn text-xs sm:text-sm px-2.5 sm:px-3.5 py-2 rounded-xl border transition text-center {% if selected_category == 'mistake' %}bg-red-600 text-white border-red-600 shadow-xs{% else %}bg-white dark:bg-slate-800 text-red-600 dark:text-red-400 border-slate-200 dark:border-slate-700{% endif %}">
+            ❌ Mistakes ({{ summary.mistake }})
+        </a>
+        <a href="/questions?category=difficult{{ base_filter.qs }}"
+           class="touch-btn text-xs sm:text-sm px-2.5 sm:px-3.5 py-2 rounded-xl border transition text-center {% if selected_category == 'difficult' %}bg-amber-500 text-white border-amber-500 shadow-xs{% else %}bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 border-slate-200 dark:border-slate-700{% endif %}">
+            ⭐ Difficult ({{ summary.difficult }})
+        </a>
+    </div>
+
+    <!-- Compact Phone-Friendly Search & Filter Bar -->
+    <form method="get" action="/questions" class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-3 sm:p-4 shadow-xs">
+        <input type="hidden" name="category" value="{{ selected_category or 'all' }}">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
+            <!-- Subject Select -->
+            <div>
+                <label for="filter_subject" class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1" data-i18n="rev_filter_subject">Subject</label>
+                <select id="filter_subject" name="subject_id" onchange="this.form.submit()"
+                        class="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm">
+                    <option value="" data-i18n="rev_all_subjects">All Subjects</option>
+                    {% for s in subjects %}
+                    <option value="{{ s.id }}" {% if selected_subject_id == s.id %}selected{% endif %}>
+                        {{ s.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Subtopic Select -->
+            <div>
+                <label for="filter_subtopic" class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1" data-i18n="rev_filter_subtopic">Personal Subtopic</label>
+                <select id="filter_subtopic" name="subtopic_id" onchange="this.form.submit()"
+                        class="w-full px-2.5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm">
+                    <option value="" data-i18n="rev_all_subtopics">All Subtopics</option>
+                    {% for st in subtopics %}
+                    <option value="{{ st.id }}" {% if selected_subtopic_id == st.id %}selected{% endif %}>
+                        {% if not selected_subject_id %}{{ st.subject_name }} → {% endif %}{{ st.name }} ({{ st.question_count }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Search Input -->
+            <div class="col-span-2 lg:col-span-1">
+                <label for="filter_q" class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1" data-i18n="rev_filter_search">Search Text</label>
+                <input type="text" id="filter_q" name="q" value="{{ search_query or '' }}"
+                       data-i18n-placeholder="rev_search_placeholder"
+                       placeholder="Search questions, options..."
+                       class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm">
+            </div>
+
+            <!-- Submit & Clear -->
+            <div class="col-span-2 lg:col-span-1 flex items-end gap-2">
+                <button type="submit"
+                        data-i18n="rev_filter_btn"
+                        class="flex-1 touch-btn bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm py-2 px-3 rounded-xl">
+                    🔍 Filter
+                </button>
+                {% if selected_subject_id or selected_subtopic_id or (selected_category and selected_category != 'all') or search_query %}
+                <a href="/questions"
+                   data-i18n="rev_reset_btn"
+                   class="touch-btn bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm py-2 px-3 rounded-xl">
+                    Reset
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+
+    <!-- Mobile Quick Drawer Buttons (So phone users see Questions immediately without scrolling past sidebar!) -->
+    <div class="grid grid-cols-2 gap-2 lg:hidden">
+        <button type="button"
+                onclick="toggleMobileSidebar('mobile-hierarchy-box')"
+                class="touch-btn bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold py-2.5 px-3 rounded-xl shadow-xs">
+            <span data-i18n="rev_mobile_folders_btn">📚 Subjects &amp; Folders</span>
+        </button>
+        <button type="button"
+                onclick="toggleMobileSidebar('mobile-create-subt-box')"
+                class="touch-btn bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-blue-600 dark:text-blue-400 text-xs font-bold py-2.5 px-3 rounded-xl shadow-xs">
+            <span data-i18n="rev_mobile_new_subt_btn">➕ New Subtopic</span>
+        </button>
+    </div>
+
+    <!-- Main Layout: Question Cards First on Phones, Sidebar on Left on Desktop -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+
+        <!-- Left Column (Desktop) / Collapsible Drawers (Phone): Subject -> Subtopic Hierarchy & Manager -->
+        <aside class="lg:col-span-4 space-y-3">
+            <!-- Create New Personal Subtopic Box -->
+            <div id="mobile-create-subt-box" class="hidden lg:block bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5 sm:p-4 shadow-xs">
+                <h2 class="text-sm font-bold text-slate-900 dark:text-white mb-2.5" data-i18n="rev_create_subt_title">
+                    ➕ Create Personal Subtopic
+                </h2>
+                <form method="post" action="/questions/subtopics/create" class="space-y-2.5">
+                    <div>
+                        <label for="new_subt_subject" class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1" data-i18n="rev_filter_subject">Subject</label>
+                        <select id="new_subt_subject" name="subject_id" required
+                                class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm">
+                            {% for s in subjects %}
+                            <option value="{{ s.id }}" {% if selected_subject_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="new_subt_name" class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1" data-i18n="rev_subt_name_label">Subtopic Name</label>
+                        <input type="text" id="new_subt_name" name="name" required maxlength="200"
+                               data-i18n-placeholder="rev_subt_name_placeholder"
+                               placeholder="Enter new subtopic name..."
+                               class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm">
+                    </div>
+                    <button type="submit"
+                            data-i18n="rev_create_subt_btn"
+                            class="w-full touch-btn bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm py-2 rounded-xl">
+                        Create Subtopic
+                    </button>
+                </form>
+            </div>
+
+            <!-- Active Subtopic Management (Rename / Move / Delete) when a Subtopic is Selected -->
+            {% if active_subtopic %}
+            <div class="bg-white dark:bg-slate-800 rounded-2xl border border-blue-300 dark:border-blue-700 p-3.5 sm:p-4 space-y-3 shadow-xs">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400" data-i18n="rev_selected_subtopic">Selected Subtopic</span>
+                        <h3 class="text-sm font-bold text-slate-900 dark:text-white truncate">
+                            {{ active_subtopic.subject_name }} → {{ active_subtopic.name }}
+                        </h3>
+                    </div>
+                </div>
+
+                <!-- Rename Subtopic -->
+                <form method="post" action="/questions/subtopics/{{ active_subtopic.id }}/rename" class="flex gap-1.5">
+                    <input type="text" name="new_name" value="{{ active_subtopic.name }}" required maxlength="200"
+                           aria-label="New subtopic name"
+                           class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">
+                    <button type="submit" data-i18n="rev_rename_btn" class="px-3 py-1.5 rounded-lg bg-slate-800 dark:bg-slate-700 text-white text-xs font-semibold shrink-0">
+                        Rename
+                    </button>
+                </form>
+
+                <!-- Move Subtopic to Another Subject -->
+                <form method="post" action="/questions/subtopics/{{ active_subtopic.id }}/move" class="flex gap-1.5">
+                    <select name="target_subject_id" aria-label="Target subject"
+                            class="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">
+                        {% for s in subjects %}
+                        <option value="{{ s.id }}" {% if s.id == active_subtopic.subject_id %}selected{% endif %}>
+                            Move to: {{ s.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" data-i18n="rev_move_btn" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold shrink-0">
+                        Move
+                    </button>
+                </form>
+
+                <!-- Delete Subtopic -->
+                <form method="post" action="/questions/subtopics/{{ active_subtopic.id }}/delete"
+                      onsubmit="return confirm('Remove this subtopic folder? Saved questions inside it will remain in your bank.');">
+                    <button type="submit" data-i18n="rev_delete_subt_btn" class="w-full py-1.5 px-3 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-semibold hover:bg-red-50 dark:hover:bg-red-900/20">
+                        🗑 Remove Subtopic Folder
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+
+            <!-- Subject -> Subtopic Hierarchy Tree -->
+            <div id="mobile-hierarchy-box" class="hidden lg:block bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5 sm:p-4 shadow-xs">
+                <div class="flex items-center justify-between mb-2.5">
+                    <h2 class="text-sm font-bold text-slate-900 dark:text-white" data-i18n="rev_hierarchy_title">
+                        📚 Subject Hierarchy
+                    </h2>
+                    <a href="/questions" class="text-xs text-blue-600 dark:text-blue-400 hover:underline" data-i18n="rev_show_all">Show All</a>
+                </div>
+
+                <div class="space-y-2">
+                    {% for subj in hierarchy %}
+                    <div class="rounded-xl border {% if selected_subject_id == subj.id %}border-blue-400 dark:border-blue-500 bg-blue-50/30 dark:bg-blue-900/20{% else %}border-slate-200 dark:border-slate-700{% endif %} p-2.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <a href="/questions?subject_id={{ subj.id }}{% if selected_category and selected_category != 'all' %}&category={{ selected_category }}{% endif %}"
+                               class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 hover:text-blue-600 dark:hover:text-blue-400 truncate">
+                                📘 {{ subj.name }}
+                            </a>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 shrink-0">
+                                {{ subj.total_count }}
+                            </span>
+                        </div>
+
+                        {% if subj.subtopics %}
+                        <ul class="mt-1.5 pl-2 border-l-2 border-slate-200 dark:border-slate-700 space-y-1">
+                            {% for st in subj.subtopics %}
+                            <li class="flex items-center justify-between gap-1 text-xs">
+                                <a href="/questions?subject_id={{ subj.id }}&subtopic_id={{ st.id }}{% if selected_category and selected_category != 'all' %}&category={{ selected_category }}{% endif %}"
+                                   class="py-0.5 truncate {% if selected_subtopic_id == st.id %}font-bold text-blue-600 dark:text-blue-400{% else %}text-slate-600 dark:text-slate-300 hover:text-blue-600{% endif %}">
+                                    📂 {{ st.name }}
+                                </a>
+                                <span class="text-[11px] text-slate-400 shrink-0">{{ st.question_count }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Column: Saved Question Cards -->
+        <section class="lg:col-span-8 space-y-3" aria-label="Saved Questions">
+            {% if not questions %}
+            <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 text-center shadow-xs">
+                <div class="text-3xl mb-2">📭</div>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white" data-i18n="rev_no_questions_title">
+                    No Saved Questions Found
+                </h2>
+                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+                    Forward a Telegram poll to <a href="{{ bot_url }}" target="_blank" rel="noopener" class="text-blue-600 dark:text-blue-400 font-semibold underline">@{{ bot_username }}</a>, select a Subject and Subtopic, and categorize it as ❌ Mistake or ⭐ Difficult.
+                </p>
+            </div>
+            {% else %}
+            <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
+                <span>Showing <b>{{ questions|length }}</b> question{% if questions|length != 1 %}s{% endif %}</span>
+                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" id="select-all-qs" onchange="toggleAllQuestionCheckboxes(this)" class="rounded">
+                    <span data-i18n="rev_select_all_export">Select all for TXT export</span>
+                </label>
+            </div>
+
+            {% for q in questions %}
+            <article id="question-card-{{ q.question_id }}"
+                     class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-3.5 sm:p-5 space-y-3 shadow-xs transition">
+
+                <!-- Top Metadata Row: Checkbox, Subject -> Subtopic, Category Tags, Translate Button & Date -->
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <input type="checkbox"
+                               value="{{ q.question_id }}"
+                               onchange="updateSelectedExportBtn()"
+                               aria-label="Select question for export"
+                               class="q-export-checkbox rounded border-slate-300 w-4 h-4">
+
+                        <!-- Subject Badge -->
+                        <a href="/questions?subject_id={{ q.subject_id or '' }}"
+                           class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                            📘 {{ q.subject_name }}
+                        </a>
+
+                        <!-- Subtopic Badge -->
+                        {% if q.subtopic_name %}
+                        <a href="/questions?subject_id={{ q.subject_id or '' }}{% if q.subtopic_id %}&subtopic_id={{ q.subtopic_id }}{% else %}&subtopic={{ q.subtopic_name|urlencode }}{% endif %}"
+                           class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                            📂 {{ q.subtopic_name }}
+                        </a>
+                        {% endif %}
+
+                        <!-- Mistake Tag -->
+                        {% if q.is_mistake %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-red-50 dark:bg-red-900/40 text-red-700 dark:text-red-300">
+                            ❌ Mistake
+                        </span>
+                        {% endif %}
+
+                        <!-- Difficult Tag -->
+                        {% if q.is_difficult %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                            ⭐ Difficult
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    <!-- 1-Tap Arabic Translation Button + Date Saved -->
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button type="button"
+                                data-qid="{{ q.question_id }}"
+                                onclick="toggleTranslateQuestionCard('{{ q.question_id }}', this)"
+                                class="q-translate-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-bold active:scale-95 transition"
+                                title="Translate this question to Arabic">
+                            🌐 <span>عربي</span>
+                        </button>
+                        <time class="text-[11px] text-slate-400 dark:text-slate-500">
+                            {{ q.created_at.strftime('%Y-%m-%d') if q.created_at and q.created_at.strftime is defined else (q.created_at|string)[:10] }}
+                        </time>
+                    </div>
+                </div>
+
+                <!-- Question Text -->
+                <div class="text-sm sm:text-base font-semibold text-slate-900 dark:text-white wrap-anywhere leading-relaxed translatable-item">
+                    {{ q.question_text }}
+                </div>
+
+                <!-- Answer Options (Tappable on phones in Study Mode to reveal answer) -->
+                {% if q.options %}
+                <div class="space-y-1.5">
+                    {% for opt in q.options %}
+                    {% set is_corr = opt.is_correct or (q.correct_option_index >= 0 and opt.option_order == q.correct_option_index) %}
+                    <div onclick="revealCardAnswer('{{ q.question_id }}')"
+                         class="flex items-start gap-2.5 p-2.5 sm:p-3 rounded-xl border text-xs sm:text-sm wrap-anywhere cursor-pointer transition {% if is_corr %}q-option-correct border-emerald-300 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-900/25 text-emerald-950 dark:text-emerald-100 font-semibold{% else %}border-slate-200 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300{% endif %}">
+                        <span class="q-opt-letter inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold shrink-0 {% if is_corr %}bg-emerald-600 text-white{% else %}bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300{% endif %}">
+                            {{ opt.letter }}
+                        </span>
+                        <span class="flex-1 pt-0.5 translatable-item">{{ opt.option_text }}</span>
+                        {% if is_corr %}
+                        <span class="q-correct-badge text-xs font-bold text-emerald-700 dark:text-emerald-300 shrink-0 pt-0.5" data-i18n="rev_correct_badge">✓ Correct</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Correct Answer Summary & Explanation (When Available) -->
+                {% if q.has_correct_answer or q.explanation or q.notes %}
+                <div class="q-answer-box rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/80 p-3 space-y-1.5 text-xs sm:text-sm wrap-anywhere">
+                    {% if q.has_correct_answer %}
+                    <div class="text-emerald-700 dark:text-emerald-300 font-semibold">
+                        ✅ Correct Answer: <span class="translatable-item">{{ q.correct_option_text }}</span>
+                    </div>
+                    {% endif %}
+                    {% if q.explanation %}
+                    <div class="text-slate-700 dark:text-slate-300">
+                        <span class="font-semibold">💡 Explanation:</span> <span class="translatable-item">{{ q.explanation }}</span>
+                    </div>
+                    {% endif %}
+                    {% if q.notes %}
+                    <div class="text-blue-700 dark:text-blue-300">
+                        <span class="font-semibold">📝 Personal Notes:</span> <span class="translatable-item">{{ q.notes }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Card Actions Bar: Category Toggles, Move, Edit, Delete -->
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <!-- Toggle Mistake Category -->
+                        <form method="post" action="/questions/{{ q.question_id }}/category" class="inline">
+                            <input type="hidden" name="category" value="mistake">
+                            <input type="hidden" name="action" value="{% if q.is_mistake %}remove{% else %}add{% endif %}">
+                            <input type="hidden" name="return_subject_id" value="{{ selected_subject_id or '' }}">
+                            <input type="hidden" name="return_subtopic_id" value="{{ selected_subtopic_id or '' }}">
+                            <input type="hidden" name="return_category" value="{{ selected_category or 'all' }}">
+                            <input type="hidden" name="return_q" value="{{ search_query or '' }}">
+                            <button type="submit"
+                                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold border active:scale-95 transition {% if q.is_mistake %}bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300{% else %}bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-red-300{% endif %}">
+                                {% if q.is_mistake %}✓ ❌ Mistake{% else %}+ ❌ Mistake{% endif %}
+                            </button>
+                        </form>
+
+                        <!-- Toggle Difficult Category -->
+                        <form method="post" action="/questions/{{ q.question_id }}/category" class="inline">
+                            <input type="hidden" name="category" value="difficult">
+                            <input type="hidden" name="action" value="{% if q.is_difficult %}remove{% else %}add{% endif %}">
+                            <input type="hidden" name="return_subject_id" value="{{ selected_subject_id or '' }}">
+                            <input type="hidden" name="return_subtopic_id" value="{{ selected_subtopic_id or '' }}">
+                            <input type="hidden" name="return_category" value="{{ selected_category or 'all' }}">
+                            <input type="hidden" name="return_q" value="{{ search_query or '' }}">
+                            <button type="submit"
+                                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold border active:scale-95 transition {% if q.is_difficult %}bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300{% else %}bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-amber-300{% endif %}">
+                                {% if q.is_difficult %}✓ ⭐ Difficult{% else %}+ ⭐ Difficult{% endif %}
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <!-- Toggle Move Subject/Subtopic Drawer -->
+                        <button type="button"
+                                onclick="togglePanel('move-panel-{{ q.question_id }}')"
+                                data-i18n="rev_btn_move"
+                                class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 active:scale-95 transition">
+                            📂 Move
+                        </button>
+
+                        <!-- Toggle Edit Question Drawer -->
+                        <button type="button"
+                                onclick="togglePanel('edit-panel-{{ q.question_id }}')"
+                                data-i18n="rev_btn_edit"
+                                class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 active:scale-95 transition">
+                            ✏️ Edit
+                        </button>
+
+                        <!-- Delete Question from Personal Revision Bank -->
+                        <form method="post" action="/questions/{{ q.question_id }}/delete" class="inline"
+                              onsubmit="return confirm('Delete this question from your personal revision bank?');">
+                            <input type="hidden" name="return_subject_id" value="{{ selected_subject_id or '' }}">
+                            <input type="hidden" name="return_subtopic_id" value="{{ selected_subtopic_id or '' }}">
+                            <input type="hidden" name="return_category" value="{{ selected_category or 'all' }}">
+                            <input type="hidden" name="return_q" value="{{ search_query or '' }}">
+                            <button type="submit"
+                                    data-i18n="rev_btn_delete"
+                                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 active:scale-95 transition">
+                                🗑 Delete
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Collapsible Panel: Change Subject or Subtopic -->
+                <div id="move-panel-{{ q.question_id }}" class="hidden pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <form method="post" action="/questions/{{ q.question_id }}/move" class="space-y-2.5 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                        <div class="text-xs font-bold text-slate-800 dark:text-slate-200">Change Subject &amp; Subtopic</div>
+                        <input type="hidden" name="return_category" value="{{ selected_category or 'all' }}">
+                        <input type="hidden" name="return_q" value="{{ search_query or '' }}">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                                <label class="block text-[11px] text-slate-500 mb-1">Subject</label>
+                                <select name="subject_id" required
+                                        class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">
+                                    {% for s in subjects %}
+                                    <option value="{{ s.id }}" {% if q.subject_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-500 mb-1">Existing Subtopic</label>
+                                <select name="subtopic_id"
+                                        class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">
+                                    <option value="">-- None / Select --</option>
+                                    {% for st in all_subtopics %}
+                                    <option value="{{ st.id }}" {% if q.subtopic_id == st.id %}selected{% endif %}>
+                                        {{ st.subject_name }} → {{ st.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] text-slate-500 mb-1">Or New Subtopic Name</label>
+                                <input type="text" name="new_subtopic_name" placeholder="Optional new subtopic..."
+                                       class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">
+                            </div>
+                        </div>
+                        <div class="flex justify-end gap-2">
+                            <button type="button" onclick="togglePanel('move-panel-{{ q.question_id }}')"
+                                    class="px-3 py-1.5 rounded-lg text-xs text-slate-600 dark:text-slate-400">
+                                Cancel
+                            </button>
+                            <button type="submit"
+                                    class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold">
+                                Save Organization
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Collapsible Panel: Edit Saved Question -->
+                <div id="edit-panel-{{ q.question_id }}" class="hidden pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <form method="post" action="/questions/{{ q.question_id }}/edit" class="space-y-2.5 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl">
+                        <div class="text-xs font-bold text-slate-800 dark:text-slate-200">Edit Saved Question (Personal Copy)</div>
+                        <input type="hidden" name="subject_id" value="{{ q.subject_id or '' }}">
+                        <input type="hidden" name="subtopic_id" value="{{ q.subtopic_id or '' }}">
+                        <input type="hidden" name="return_category" value="{{ selected_category or 'all' }}">
+                        <input type="hidden" name="return_q" value="{{ search_query or '' }}">
+
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Question Text</label>
+                            <textarea name="question_text" rows="2" required
+                                      class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">{{ q.question_text }}</textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Answer Options (one per line)</label>
+                            <textarea name="options_text" rows="4" required
+                                      class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">{% for opt in q.options %}{{ opt.option_text }}{% if not loop.last %}&#10;{% endif %}{% endfor %}</textarea>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Correct Option (0 = A, 1 = B, 2 = C, -1 = None)</label>
+                                <input type="number" name="correct_option_index" min="-1" max="9" value="{{ q.correct_option_index }}"
+                                       class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Personal Notes</label>
+                                <input type="text" name="notes" value="{{ q.notes or '' }}" placeholder="Optional personal note..."
+                                       class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Explanation</label>
+                            <textarea name="explanation" rows="2" placeholder="Optional explanation..."
+                                      class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs">{{ q.explanation or '' }}</textarea>
+                        </div>
+
+                        <div class="flex justify-end gap-2">
+                            <button type="button" onclick="togglePanel('edit-panel-{{ q.question_id }}')"
+                                    class="px-3 py-1.5 rounded-lg text-xs text-slate-600 dark:text-slate-400">
+                                Cancel
+                            </button>
+                            <button type="submit"
+                                    class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold">
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+            </article>
+            {% endfor %}
+            {% endif %}
+        </section>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function togglePanel(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.classList.toggle('hidden');
+        }
+    }
+
+    function toggleMobileSidebar(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.classList.toggle('hidden');
+        }
+    }
+
+    function toggleStudyMode(btn) {
+        var hidden = document.body.classList.toggle('study-hide-answers');
+        if (!hidden) {
+            var revealed = document.querySelectorAll('article.card-revealed');
+            for (var i = 0; i < revealed.length; i++) {
+                revealed[i].classList.remove('card-revealed');
+            }
+            var corrOpts = document.querySelectorAll('.q-option-correct.q-revealed');
+            for (var j = 0; j < corrOpts.length; j++) {
+                corrOpts[j].classList.remove('q-revealed');
+            }
+        }
+        if (btn) {
+            btn.classList.toggle('bg-blue-600', hidden);
+            btn.classList.toggle('text-white', hidden);
+            btn.textContent = hidden ? '👁 Show All Answers' : '👁 Hide Answers';
+        }
+    }
+
+    function revealCardAnswer(questionId) {
+        if (!document.body.classList.contains('study-hide-answers')) return;
+        var card = document.getElementById('question-card-' + questionId);
+        if (!card) return;
+        card.classList.toggle('card-revealed');
+        var corr = card.querySelectorAll('.q-option-correct');
+        for (var i = 0; i < corr.length; i++) {
+            corr[i].classList.toggle('q-revealed');
+        }
+    }
+
+    function toggleAllQuestionCheckboxes(master) {
+        var boxes = document.querySelectorAll('.q-export-checkbox');
+        for (var i = 0; i < boxes.length; i++) {
+            boxes[i].checked = master.checked;
+        }
+        updateSelectedExportBtn();
+    }
+
+    function updateSelectedExportBtn() {
+        var checked = document.querySelectorAll('.q-export-checkbox:checked');
+        var btn = document.getElementById('export-selected-btn');
+        if (!btn) return;
+        if (checked.length > 0) {
+            btn.classList.remove('hidden');
+            btn.textContent = '⬇️ Export Selected TXT (' + checked.length + ')';
+        } else {
+            btn.classList.add('hidden');
+        }
+    }
+
+    function exportSelectedQuestions() {
+        var checked = document.querySelectorAll('.q-export-checkbox:checked');
+        var ids = [];
+        for (var i = 0; i < checked.length; i++) {
+            ids.push(checked[i].value);
+        }
+        if (ids.length > 0) {
+            window.location.href = '/questions/export.txt?ids=' + encodeURIComponent(ids.join(','));
+        }
+    }
+</script>
+{% endblock %}
